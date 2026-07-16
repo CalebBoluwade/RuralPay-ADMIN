@@ -154,6 +154,7 @@ jobs:
             --restart unless-stopped \
             -p 3000:3000 \
             --env-file /home/${{ secrets.EC2_USER }}/.env.dashboard \
+            -v /home/${{ secrets.EC2_USER }}/.env.dashboard:/app/.env.dashboard \
             ruralpay-dashboard:${{ github.sha }}
 
           rm ~/ruralpay-dashboard.tar.gz
