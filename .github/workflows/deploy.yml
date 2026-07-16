@@ -125,38 +125,36 @@ jobs:
       - name: Save Docker image
         run: docker save ruralpay-dashboard:${{ github.sha }} | gzip > ruralpay-dashboard.tar.gz
 
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
       - name: Copy image to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: ruralpay-dashboard.tar.gz
-          target: /home/${{ secrets.EC2_USER }}/
+        run: scp -i ~/.ssh/deploy_key ruralpay-dashboard.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/
 
       - name: Deploy on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            if ! command -v docker &> /dev/null; then
-              curl -fsSL https://get.docker.com | sh
-              sudo usermod -aG docker $USER
-            fi
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          if ! command -v docker &> /dev/null; then
+            curl -fsSL https://get.docker.com | sh
+            sudo usermod -aG docker $USER
+          fi
 
-            sudo docker load < ~/ruralpay-dashboard.tar.gz
+          sudo docker stop ruralpay-dashboard || true
+          sudo docker rm ruralpay-dashboard || true
+          sudo docker images ruralpay-dashboard -q | xargs -r sudo docker rmi -f
+          sudo docker image prune -f
+          sudo docker load < ~/ruralpay-dashboard.tar.gz
 
-            sudo docker stop ruralpay-dashboard || true
-            sudo docker rm ruralpay-dashboard || true
+          sudo docker run -d \
+            --name ruralpay-dashboard \
+            --restart unless-stopped \
+            -p 3000:3000 \
+            --env-file /home/${{ secrets.EC2_USER }}/.env.dashboard \
+            ruralpay-dashboard:${{ github.sha }}
 
-            sudo docker run -d \
-              --name ruralpay-dashboard \
-              --restart unless-stopped \
-              -p 3000:3000 \
-              --env-file /home/${{ secrets.EC2_USER }}/.env.dashboard \
-              ruralpay-dashboard:${{ github.sha }}
-
-            sudo docker image prune -f
-            rm ~/ruralpay-dashboard.tar.gz
+          rm ~/ruralpay-dashboard.tar.gz
+          EOF
