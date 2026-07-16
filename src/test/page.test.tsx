@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import Home from "@/app/page";
 
-describe("Home", () => {
+describe("Home Page", () => {
   it("renders the heading", () => {
     render(<Home />);
     expect(
