@@ -16,7 +16,7 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { useGenerateApiKeyMutation, useGetApiKeysQuery, useRevokeApiKeyMutation } from "@/lib/store/api";
+import { useGenerateCheckoutApiKeyMutation, useGetCheckoutApiKeysQuery, useRevokeCheckoutApiKeyMutation } from "@/lib/store/api";
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", {
@@ -26,10 +26,10 @@ const formatDate = (iso: string) =>
   });
 
 export default function ApiKeysPage() {
-  const { data, isLoading } = useGetApiKeysQuery();
+  const { data, isLoading } = useGetCheckoutApiKeysQuery();
   const keys = data?.details ?? [];
-  const [generateApiKey, { isLoading: isGenerating }] = useGenerateApiKeyMutation();
-  const [revokeApiKey] = useRevokeApiKeyMutation();
+  const [generateApiKey, { isLoading: isGenerating }] = useGenerateCheckoutApiKeyMutation();
+  const [revokeApiKey] = useRevokeCheckoutApiKeyMutation();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [label, setLabel] = useState("");

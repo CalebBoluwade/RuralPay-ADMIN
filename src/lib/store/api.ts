@@ -1,9 +1,9 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 export interface APIResponse<T> {
-  message: string,
-    success: boolean,
-    details: T
+  message: string;
+  success: boolean;
+  details: T;
 }
 
 export type ApiKeyResponse = {
@@ -87,7 +87,10 @@ export const api = createApi({
   tagTypes: ["ApiKeys", "Merchants", "Tenants"],
   endpoints: (builder) => ({
     // Generate Merchant Checkout API Key
-    generateApiKey: builder.mutation<APIResponse<ApiKeyResponse>, { label: string }>({
+    generateCheckoutApiKey: builder.mutation<
+      APIResponse<ApiKeyResponse>,
+      { label: string }
+    >({
       query: ({ label }) => ({
         url: `/checkout/api-key?label=${encodeURIComponent(label)}`,
         method: "POST",
@@ -96,13 +99,13 @@ export const api = createApi({
     }),
 
     // List API Keys (keys are masked server-side)
-    getApiKeys: builder.query<APIResponse<ApiKeyListItem[]>, void>({
+    getCheckoutApiKeys: builder.query<APIResponse<ApiKeyListItem[]>, void>({
       query: () => "/checkout/api-key",
       providesTags: ["ApiKeys"],
     }),
 
     // Revoke API Key
-    revokeApiKey: builder.mutation<void, number>({
+    revokeCheckoutApiKey: builder.mutation<void, number>({
       query: (id) => ({ url: `/checkout/api-key/${id}`, method: "DELETE" }),
       invalidatesTags: ["ApiKeys"],
     }),
@@ -120,7 +123,10 @@ export const api = createApi({
       query: (id) => ({ url: `/merchant/${id}`, method: "DELETE" }),
       invalidatesTags: ["Merchants"],
     }),
-    uploadMerchantDocument: builder.mutation<void, { merchantId: string; file: FormData }>({
+    uploadMerchantDocument: builder.mutation<
+      void,
+      { merchantId: string; file: FormData }
+    >({
       query: ({ merchantId, file }) => ({
         url: `/merchant/${merchantId}/documents`,
         method: "POST",
@@ -138,7 +144,18 @@ export const api = createApi({
     }),
 
     // Banks
-    getBanks: builder.query<APIResponse<{ bankCode: string; cbnCode: string; name: string; logoData: string; uptimePrediction: number }[]>, void>({
+    getBanks: builder.query<
+      APIResponse<
+        {
+          bankCode: string;
+          cbnCode: string;
+          name: string;
+          logoData: string;
+          uptimePrediction: number;
+        }[]
+      >,
+      void
+    >({
       query: () => "/banks",
     }),
 
@@ -147,8 +164,19 @@ export const api = createApi({
       query: () => "/tenants",
       providesTags: ["Tenants"],
     }),
-    updateTenant: builder.mutation<TenantConfig, { id: string; body: Partial<TenantConfig> }>({
-      query: ({ id, body }) => ({ url: `/tenants/${id}`, method: "PATCH", body }),
+    createTenant: builder.mutation<TenantConfig, Partial<TenantConfig>>({
+      query: (body) => ({ url: "/tenants", method: "POST", body }),
+      invalidatesTags: ["Tenants"],
+    }),
+    updateTenant: builder.mutation<
+      TenantConfig,
+      { id: string; body: Partial<TenantConfig> }
+    >({
+      query: ({ id, body }) => ({
+        url: `/tenants/${id}`,
+        method: "PATCH",
+        body,
+      }),
       invalidatesTags: ["Tenants"],
     }),
     deployTenant: builder.mutation<DeployResponse, string>({
@@ -158,9 +186,9 @@ export const api = createApi({
 });
 
 export const {
-  useGenerateApiKeyMutation,
-  useGetApiKeysQuery,
-  useRevokeApiKeyMutation,
+  useGenerateCheckoutApiKeyMutation,
+  useGetCheckoutApiKeysQuery,
+  useRevokeCheckoutApiKeyMutation,
   useGetMerchantsQuery,
   useCreateMerchantMutation,
   useDeleteMerchantMutation,
@@ -169,6 +197,7 @@ export const {
   useDeclineMerchantMutation,
   useGetBanksQuery,
   useGetTenantsQuery,
+  useCreateTenantMutation,
   useUpdateTenantMutation,
   useDeployTenantMutation,
 } = api;
