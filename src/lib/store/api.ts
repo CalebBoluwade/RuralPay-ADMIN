@@ -42,6 +42,45 @@ export type TenantConfig = {
   features: { transfers: boolean; offlineMode: boolean; crypto: boolean };
 };
 
+export type TenantConfigPatch = {
+  appName?: string;
+  currency?: string;
+  currencyCode?: string;
+  colors?: {
+    primary?: string;
+    primaryDark?: string;
+    accent?: string;
+    accentDark?: string;
+  };
+  features?: {
+    nfc?: boolean;
+    bluetooth?: boolean;
+    ussd?: boolean;
+    voiceBanking?: boolean;
+    liveness?: boolean;
+    qrPayments?: boolean;
+    billPayments?: boolean;
+    consumerRole?: boolean;
+    merchantRole?: boolean;
+  };
+  legal?: {
+    privacyEmail?: string;
+    supportEmail?: string;
+    regulatoryBody?: string;
+    complianceNote?: string;
+    privacyPolicyUrl?: string;
+    consentVersion?: string;
+  };
+  copy?: {
+    tagline?: string;
+  };
+  assets?: {
+    splashScreen?: string;
+    appLogo?: string;
+    appIcon?: string;
+  };
+};
+
 export type DeployResponse = {
   deployId: string;
   status: "queued" | "building" | "deployed" | "failed";
@@ -168,18 +207,18 @@ export const api = createApi({
       query: (body) => ({ url: "/tenants", method: "POST", body }),
       invalidatesTags: ["Tenants"],
     }),
-    updateTenant: builder.mutation<
-      TenantConfig,
-      { id: string; body: Partial<TenantConfig> }
+    updateTenantConfig: builder.mutation<
+      APIResponse<TenantConfigPatch>,
+      { tenantId: string; body: TenantConfigPatch }
     >({
-      query: ({ id, body }) => ({
-        url: `/tenants/${id}`,
+      query: ({ tenantId, body }) => ({
+        url: `/admin/tenant/${tenantId}/config`,
         method: "PATCH",
         body,
       }),
       invalidatesTags: ["Tenants"],
     }),
-    deployTenant: builder.mutation<DeployResponse, string>({
+    deployTenantConfig: builder.mutation<DeployResponse, string>({
       query: (id) => ({ url: `/tenants/${id}/deploy`, method: "POST" }),
     }),
   }),
@@ -198,6 +237,6 @@ export const {
   useGetBanksQuery,
   useGetTenantsQuery,
   useCreateTenantMutation,
-  useUpdateTenantMutation,
-  useDeployTenantMutation,
+  useUpdateTenantConfigMutation,
+  useDeployTenantConfigMutation,
 } = api;

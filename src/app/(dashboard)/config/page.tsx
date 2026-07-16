@@ -25,6 +25,7 @@ import {
   SignalHigh,
   BatteryFull,
 } from "lucide-react";
+import { useUpdateTenantConfigMutation, useDeployTenantConfigMutation, type TenantConfigPatch } from "@/lib/store/api";
 
 type PreviewScreen = "home" | "transactions" | "splash";
 
@@ -119,37 +120,30 @@ export default function ConfigPage() {
     });
   };
 
-  const [saving, setSaving] = useState(false);
-  const [deploying, setDeploying] = useState(false);
+  const [updateTenantConfig, { isLoading: saving }] = useUpdateTenantConfigMutation();
+  const [deployTenant, { isLoading: deploying }] = useDeployTenantConfigMutation();
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      await fetch(`/api/tenants/${activeTenant.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(activeTenant),
-      });
-    } catch (err) {
-      console.error("Save failed:", err);
-    } finally {
-      setSaving(false);
-    }
+    const payload: TenantConfigPatch = {
+      appName: activeTenant.appName,
+      colors: {
+        primary: activeTenant.theme.primary,
+        primaryDark: activeTenant.theme.secondary,
+      },
+      features: {
+        nfc: activeTenant.features.nfcPayment,
+        bluetooth: activeTenant.features.offlineMode,
+      },
+      assets: {
+        splashScreen: activeTenant.splashImage || undefined,
+        appLogo: activeTenant.logo || undefined,
+      },
+    };
+    await updateTenantConfig({ tenantId: activeTenant.id, body: payload });
   };
 
   const handleDeploy = async () => {
-    setDeploying(true);
-    try {
-      await fetch(`/api/tenants/${activeTenant.id}/deploy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: activeTenant.id }),
-      });
-    } catch (err) {
-      console.error("Deploy failed:", err);
-    } finally {
-      setDeploying(false);
-    }
+    await deployTenant(activeTenant.id);
   };
 
   return (
