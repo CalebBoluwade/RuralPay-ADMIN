@@ -15,18 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - uses: oven-sh/setup-bun@v2
 
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
       - name: Run tests
         id: test
         run: |
           set +e
-          output=$(npm run lint 2>&1 && npm run test 2>&1)
+          output=$(bun run lint 2>&1 && bun run test 2>&1)
           exit_code=$?
           echo "details<<EOF" >> $GITHUB_OUTPUT
           echo "$output" >> $GITHUB_OUTPUT
