@@ -155,7 +155,7 @@ jobs:
               --name ruralpay-dashboard \
               --restart unless-stopped \
               -p 3000:3000 \
-              -v /home/${{ secrets.EC2_USER }}/.env.local:/app/.env.local \
+              --env-file /home/${{ secrets.EC2_USER }}/.env.dashboard \
               ruralpay-dashboard:${{ github.sha }}
 
             sudo docker image prune -f
