@@ -18,7 +18,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-slate-900 text-white flex flex-col shadow-2xl z-20">
       <div className="p-6 flex items-center gap-3">
-        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+        <div className="w-8 h-8 bg-linear-to-br from-indigo-700 to-purple-800 rounded-lg flex items-center justify-center">
           <Globe size={18} className="text-white" />
         </div>
         <span className="font-bold text-xl tracking-tight">RuralPayAdmin</span>

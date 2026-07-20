@@ -25,71 +25,73 @@ import {
   SignalHigh,
   BatteryFull,
 } from "lucide-react";
-import { useUpdateTenantConfigMutation, useDeployTenantConfigMutation, type TenantConfigPatch } from "@/lib/store/api";
+import { toast } from "sonner";
+import { useCreateTenantMutation, useGetTenantsQuery, useGetTenantByIdQuery, useUpdateTenantConfigMutation, useUploadTenantAssetsMutation, useDeployTenantConfigMutation, type TenantConfig } from "@/lib/store/api";
 
-type PreviewScreen = "home" | "transactions" | "splash";
-
-const INITIAL_TENANTS = [
-  {
-    id: "t_1",
-    name: "RuralPay (Default)",
-    domain: "app.ruralpay.co",
-    appName: "RuralPay",
-    slug: "ruralpay",
-    bundleIdentifier: "co.ruralpay.app",
-    theme: {
-      primary: "#0a7ea4",
-      secondary: "#a3e635",
-      radius: "rounded-xl",
-      mode: "light",
-    },
-    logo: "",
-    splashImage: "",
-    features: { transfers: true, offlineMode: true, nfcPayment: false, multiAccountLinking: false },
-  },
-  {
-    id: "t_2",
-    name: "AgriBank",
-    domain: "mobile.agribank.ng",
-    appName: "AgriBank Mobile",
-    slug: "agribank",
-    bundleIdentifier: "ng.agribank.mobile",
-    theme: {
-      primary: "#3b82f6",
-      secondary: "#1d4ed8",
-      radius: "rounded-md",
-      mode: "dark",
-    },
-    logo: "",
-    splashImage: "",
-    features: { transfers: true, offlineMode: false, nfcPayment: false, multiAccountLinking: false },
-  },
-  {
-    id: "t_3",
-    name: "FarmWallet",
-    domain: "wallet.farmco.com",
-    appName: "FarmWallet",
-    slug: "farmwallet",
-    bundleIdentifier: "com.farmco.wallet",
-    theme: {
-      primary: "#f97316",
-      secondary: "#c2410c",
-      radius: "rounded-3xl",
-      mode: "light",
-    },
-    logo: "",
-    splashImage: "",
-    features: { transfers: true, offlineMode: true, nfcPayment: true, multiAccountLinking: false },
-  },
-];
+type PreviewScreen = "Home" | "Transactions" | "Splash";
 
 export default function ConfigPage() {
-  const [tenants, setTenants] = useState(INITIAL_TENANTS);
-  const [activeTenantId, setActiveTenantId] = useState(INITIAL_TENANTS[0].id);
+  const { data: tenantsResponse, isFetching: fetchingTenants } = useGetTenantsQuery();
+  const [createTenant, { isLoading: creating }] = useCreateTenantMutation();
+
+  const fetchedTenants = tenantsResponse?.details ?? [];
+
+  const [selectedTenantId, setSelectedTenantId] = useState("");
+  const activeTenantId = selectedTenantId || fetchedTenants[0]?.tenantId || "";
+  const { data: tenantByIdResponse, isFetching: fetchingConfig } = useGetTenantByIdQuery(
+    { tenantId: activeTenantId },
+    { skip: !activeTenantId }
+  );
+
+  const tenantConfig = tenantByIdResponse?.details;
+
+//   console.log(fetchedTenants, "cfsgsfs", tenantConfig, "fgds", tenantByIdResponse)
+
+  const defaultTenant = {
+    id: activeTenantId,
+    appName: tenantConfig?.appName ?? "RuralPay",
+    domain: tenantConfig?.bundleIdentifier,
+    bundleIdentifier: tenantConfig?.bundleIdentifier ?? fetchedTenants.find(t => t.tenantId === activeTenantId)?.bundleIdentifier,
+    currency: tenantConfig?.currency ?? "₦",
+    currencyCode: tenantConfig?.currencyCode ?? "NGN",
+    logo: tenantConfig?.assets?.appLogo ?? "",
+    appIcon: tenantConfig?.assets?.appIcon ?? "",
+    splashImage: tenantConfig?.assets?.splashScreen ?? "",
+    theme: {
+      primary: tenantConfig?.colors?.primary ?? "#4f46e5",
+      secondary: tenantConfig?.colors?.accent ?? "#3730a3",
+      mode: "light" as "light" | "dark",
+      radius: "rounded-xl",
+    },
+    features: {
+      transfers: true,
+      offlineMode: tenantConfig?.features?.bluetooth ?? false,
+      nfcPayment: tenantConfig?.features?.nfc ?? false,
+      multiAccountLinking: false,
+    },
+  };
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, Record<string, unknown>>>({});
+  const [assetFiles, setAssetFiles] = useState<{ splash_screen?: File; app_logo?: File; app_icon?: File }>({});
+
+  const tenantOverrides = localOverrides[activeTenantId] ?? {};
+  const activeTenant = {
+    ...defaultTenant,
+    ...tenantOverrides,
+    theme: { ...defaultTenant.theme, ...(tenantOverrides.theme as object ?? {}) },
+    features: { ...defaultTenant.features, ...(tenantOverrides.features as object ?? {}) },
+  } as typeof defaultTenant;
+
   const [isHoveringPhone, setIsHoveringPhone] = useState(false);
-  const [previewScreen, setPreviewScreen] = useState<PreviewScreen>("home");
+  const [previewScreen, setPreviewScreen] = useState<PreviewScreen>("Home");
   const [mouseRotation, setMouseRotation] = useState({ x: 0, y: 0 });
   const previewRef = useRef<HTMLDivElement>(null);
+
+  const handleCreateTenant = async () => {
+    const name = prompt("Enter new tenant app name:");
+    if (!name) return;
+    await createTenant({ appName: name });
+  };
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!previewRef.current) return;
@@ -97,14 +99,13 @@ export default function ConfigPage() {
     const x = ((e.clientY - rect.top) / rect.height - 0.5) * 10;
     const y = ((e.clientX - rect.left) / rect.width - 0.5) * -15;
     setMouseRotation({ x, y });
-  }, []);
-
-  const activeTenant = tenants.find((t) => t.id === activeTenantId)!;
+  }, [setMouseRotation]);
 
   const updateActiveTenant = (updates: Record<string, unknown>) => {
-    setTenants(
-      tenants.map((t) => (t.id === activeTenantId ? { ...t, ...updates } : t)),
-    );
+    setLocalOverrides((prev) => ({
+      ...prev,
+      [activeTenantId]: { ...(prev[activeTenantId] ?? {}), ...updates },
+    }));
   };
 
   const updateTheme = (themeUpdates: Record<string, unknown>) => {
@@ -121,33 +122,65 @@ export default function ConfigPage() {
   };
 
   const [updateTenantConfig, { isLoading: saving }] = useUpdateTenantConfigMutation();
+  const [uploadTenantAssets, { isLoading: uploadingAssets }] = useUploadTenantAssetsMutation();
   const [deployTenant, { isLoading: deploying }] = useDeployTenantConfigMutation();
 
+  const isBusy = saving || uploadingAssets || deploying || creating || fetchingTenants || fetchingConfig;
+
   const handleSave = async () => {
-    const payload: TenantConfigPatch = {
+    const payload: TenantConfig = {
       appName: activeTenant.appName,
+      bundleIdentifier: activeTenant.bundleIdentifier!,
       colors: {
         primary: activeTenant.theme.primary,
-        primaryDark: activeTenant.theme.secondary,
+        accent: activeTenant.theme.secondary,
       },
       features: {
         nfc: activeTenant.features.nfcPayment,
         bluetooth: activeTenant.features.offlineMode,
       },
-      assets: {
-        splashScreen: activeTenant.splashImage || undefined,
-        appLogo: activeTenant.logo || undefined,
-      },
     };
     await updateTenantConfig({ tenantId: activeTenant.id, body: payload });
   };
 
+  const handleUploadAssets = async () => {
+    const hasAssets = Object.values(assetFiles).some(Boolean);
+    if (!hasAssets) {
+      toast.error("No assets selected to upload.");
+      return;
+    }
+    const formData = new FormData();
+    if (assetFiles.splash_screen) formData.append("splash_screen", assetFiles.splash_screen);
+    if (assetFiles.app_logo) formData.append("app_logo", assetFiles.app_logo);
+    if (assetFiles.app_icon) formData.append("app_icon", assetFiles.app_icon);
+    await uploadTenantAssets({ tenantId: activeTenant.id, formData });
+    setAssetFiles({});
+  };
+
   const handleDeploy = async () => {
+    const missingAssets = !activeTenant.logo && !assetFiles.app_logo;
+    const missingSplash = !activeTenant.splashImage && !assetFiles.splash_screen;
+    if (missingAssets || missingSplash) {
+      toast.error("App Logo and Splash Screen are required before deploying.");
+      return;
+    }
     await deployTenant(activeTenant.id);
   };
 
   return (
     <>
+        {/* Loading overlay */}
+        {isBusy && (
+          <div className="fixed inset-0 z-50 bg-white/60 backdrop-blur-sm flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-3 border-lime-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm font-medium text-slate-600">
+                {fetchingTenants || fetchingConfig ? "Loading..." : saving || uploadingAssets ? "Saving..." : deploying ? "Deploying..." : "Processing..."}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* HEADER */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10 shrink-0">
           <h1 className="text-xl font-semibold text-slate-800 capitalize">
@@ -173,28 +206,34 @@ export default function ConfigPage() {
               {/* Tenant Selector */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                  <Globe className="text-indigo-500" size={20} /> Select Active
-                  Tenant
+                  <Globe className="text-lime-500" size={20} /> Select Active Tenant
                 </h2>
                 <div className="grid grid-cols-3 gap-4">
-                  {tenants.map((tenant) => (
+                  {fetchedTenants.map((tenant) => (
                     <button
-                      key={tenant.id}
-                      onClick={() => setActiveTenantId(tenant.id)}
+                      key={tenant.tenantId}
+                      onClick={() => setSelectedTenantId(tenant.tenantId)}
                       className={`p-4 rounded-xl border-2 text-left transition-all ${
-                        activeTenantId === tenant.id
-                          ? "border-indigo-500 bg-indigo-50/50 shadow-md transform scale-[1.02]"
+                        activeTenantId === tenant.tenantId
+                          ? "border-lime-500 bg-lime-50/50 shadow-md transform scale-[1.02]"
                           : "border-slate-100 bg-white hover:border-slate-300"
                       }`}
                     >
                       <div className="font-semibold text-slate-800">
-                        {tenant.name}
+                        {tenant.appName}
                       </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {tenant.domain}
+                      <div className="text-xs text-slate-500 mt-1 break-all">
+                        {tenant.bundleIdentifier}
                       </div>
                     </button>
                   ))}
+                  <button
+                    onClick={handleCreateTenant}
+                    disabled={creating}
+                    className="p-4 rounded-xl border-2 border-dashed border-slate-300 text-left hover:border-lime-400 transition-all flex items-center justify-center text-sm text-slate-500 hover:text-lime-600 disabled:opacity-50"
+                  >
+                    {creating ? "Creating..." : "+ New Tenant"}
+                  </button>
                 </div>
               </div>
 
@@ -225,7 +264,7 @@ export default function ConfigPage() {
                         onChange={(e) =>
                           updateTheme({ primary: e.target.value })
                         }
-                        className="flex-1 p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase font-mono text-sm"
+                        className="flex-1 p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500 outline-none uppercase font-mono text-sm"
                       />
                     </div>
                   </div>
@@ -249,7 +288,7 @@ export default function ConfigPage() {
                         onChange={(e) =>
                           updateTheme({ secondary: e.target.value })
                         }
-                        className="flex-1 p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none uppercase font-mono text-sm"
+                        className="flex-1 p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500 outline-none uppercase font-mono text-sm"
                       />
                     </div>
                   </div>
@@ -265,7 +304,7 @@ export default function ConfigPage() {
                           onClick={() => updateTheme({ mode })}
                           className={`flex-1 py-2 text-sm font-medium border-2 rounded-lg flex items-center justify-center gap-2 ${
                             activeTenant.theme.mode === mode
-                              ? "border-indigo-500 text-indigo-700 bg-indigo-50"
+                              ? "border-lime-500 text-lime-700 bg-lime-50"
                               : "border-slate-200 text-slate-600 hover:border-slate-300"
                           }`}
                         >
@@ -292,7 +331,7 @@ export default function ConfigPage() {
                           onClick={() => updateTheme({ radius })}
                           className={`flex-1 py-2 text-sm font-medium border-2 ${
                             activeTenant.theme.radius === radius
-                              ? "border-indigo-500 text-indigo-700 bg-indigo-50"
+                              ? "border-lime-500 text-lime-700 bg-lime-50"
                               : "border-slate-200 text-slate-600 hover:border-slate-300"
                           } ${radius}`}
                         >
@@ -301,105 +340,110 @@ export default function ConfigPage() {
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Logo Upload
-                    </label>
-                    <div className="flex items-center gap-4">
-                      {activeTenant.logo ? (
-                        <NextImage
-                          src={activeTenant.logo}
-                          alt="Tenant logo"
-                          width={64}
-                          height={64}
-                          className="w-16 h-16 object-contain rounded-lg border border-slate-200"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">
-                          <Upload size={20} />
-                        </div>
-                      )}
-                      <label className="cursor-pointer flex items-center gap-2 text-sm bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-100 transition-colors font-medium">
-                        <Upload size={14} />
-                        {activeTenant.logo ? "Change Logo" : "Upload Logo"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                updateActiveTenant({ logo: reader.result as string });
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                      {activeTenant.logo && (
-                        <button
-                          onClick={() => updateActiveTenant({ logo: "" })}
-                          className="text-sm text-red-500 hover:text-red-700"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* Splash Screen */}
+              {/* Assets Upload */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
-                  <ImageIcon className="text-purple-500" size={20} /> Splash Screen
+                  <ImageIcon className="text-lime-500" size={20} /> App Assets
                 </h2>
-                <div className="flex items-center gap-4">
-                  {activeTenant.splashImage ? (
-                    <NextImage
-                      src={activeTenant.splashImage}
-                      alt="Splash screen"
-                      width={128}
-                      height={224}
-                      className="w-32 h-56 object-cover rounded-xl border border-slate-200"
-                    />
-                  ) : (
-                    <div className="w-32 h-56 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 gap-2">
-                      <Upload size={20} />
-                      <span className="text-xs">No splash</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Logo + Icon */}
+                  <div className="flex flex-wrap gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50/50">
+                    {/* App Logo */}
+                    <div className="flex items-center gap-4">
+                      {activeTenant.logo ? (
+                        <NextImage src={activeTenant.logo} alt="Tenant logo" width={120} height={120} className="w-32 h-32 object-contain rounded-lg border border-slate-200 shrink-0" />
+                      ) : (
+                        <div className="w-32 h-32 shrink-0 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">
+                          <Upload size={22} />
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700">App Logo</span>
+                        <div className="flex items-center gap-2">
+                          <label className="cursor-pointer flex items-center gap-1.5 text-xs bg-lime-50 text-lime-700 px-3 py-1.5 rounded-lg hover:bg-lime-100 transition-colors font-medium">
+                            <Upload size={12} />
+                            {activeTenant.logo ? "Change" : "Upload"}
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setAssetFiles((prev) => ({ ...prev, app_logo: file }));
+                                const reader = new FileReader();
+                                reader.onloadend = () => updateActiveTenant({ logo: reader.result as string });
+                                reader.readAsDataURL(file);
+                              }
+                            }} />
+                          </label>
+                          {activeTenant.logo && (
+                            <button onClick={() => updateActiveTenant({ logo: "" })} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex flex-col gap-2">
-                    <label className="cursor-pointer flex items-center gap-2 text-sm bg-purple-50 text-purple-700 px-4 py-2 rounded-lg hover:bg-purple-100 transition-colors font-medium">
+                    <div className="border-l border-slate-100" />
+                    {/* App Icon */}
+                    <div className="flex items-center gap-4">
+                      {activeTenant.appIcon ? (
+                        <NextImage src={activeTenant.appIcon} alt="App icon" width={120} height={120} className="w-32 h-32 object-contain rounded-2xl border border-slate-200 shrink-0" />
+                      ) : (
+                        <div className="w-32 h-32 shrink-0 rounded-2xl border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400">
+                          <Upload size={22} />
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700">App Icon</span>
+                        <div className="flex items-center gap-2">
+                          <label className="cursor-pointer flex items-center gap-1.5 text-xs bg-lime-50 text-lime-700 px-3 py-1.5 rounded-lg hover:bg-lime-100 transition-colors font-medium">
+                            <Upload size={12} />
+                            {activeTenant.appIcon ? "Change" : "Upload"}
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setAssetFiles((prev) => ({ ...prev, app_icon: file }));
+                                const reader = new FileReader();
+                                reader.onloadend = () => updateActiveTenant({ appIcon: reader.result as string });
+                                reader.readAsDataURL(file);
+                              }
+                            }} />
+                          </label>
+                          {activeTenant.appIcon && (
+                            <button onClick={() => updateActiveTenant({ appIcon: "" })} className="text-xs text-red-500 hover:text-red-700">Remove</button>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">Recommended: 1024×1024px</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Splash Screen */}
+                  <div className="flex flex-col items-center gap-3 p-4 border border-slate-100 rounded-xl bg-slate-50/50">
+                    {activeTenant.splashImage ? (
+                      <NextImage src={activeTenant.splashImage} alt="Splash screen" width={128} height={280} className="w-48 h-70 object-cover rounded-xl border border-slate-200" />
+                    ) : (
+                      <div className="w-48 h-70 rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 gap-2">
+                        <Upload size={20} />
+                        <span className="text-xs">No Splash</span>
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-slate-700">Splash Screen</span>
+                    <label className="cursor-pointer flex items-center gap-2 text-sm bg-lime-50 text-lime-700 px-4 py-2 rounded-lg hover:bg-lime-100 transition-colors font-medium">
                       <Upload size={14} />
-                      {activeTenant.splashImage ? "Change Splash" : "Upload Splash"}
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              updateActiveTenant({ splashImage: reader.result as string });
-                            };
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                      />
+                      {activeTenant.splashImage ? "Change" : "Upload"}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setAssetFiles((prev) => ({ ...prev, splash_screen: file }));
+                          const reader = new FileReader();
+                          reader.onloadend = () => updateActiveTenant({ splashImage: reader.result as string });
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
                     </label>
                     {activeTenant.splashImage && (
-                      <button
-                        onClick={() => updateActiveTenant({ splashImage: "" })}
-                        className="text-sm text-red-500 hover:text-red-700"
-                      >
-                        Remove
-                      </button>
+                      <button onClick={() => updateActiveTenant({ splashImage: "" })} className="text-xs text-red-500 hover:text-red-700">Remove</button>
                     )}
-                    <p className="text-xs text-slate-400 mt-1">Recommended: 1242×2688px</p>
+                    <p className="text-xs text-slate-400">Recommended: 1242×2688px</p>
                   </div>
                 </div>
               </div>
@@ -407,7 +451,7 @@ export default function ConfigPage() {
               {/* App Identity */}
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h2 className="text-lg font-semibold mb-6 flex items-center gap-2">
-                  <AppWindow className="text-indigo-500" size={20} /> App Identity
+                  <AppWindow className="text-lime-500" size={20} /> App Identity
                 </h2>
                 <div className="space-y-4">
                   <div>
@@ -416,16 +460,16 @@ export default function ConfigPage() {
                       type="text"
                       value={activeTenant.appName}
                       onChange={(e) => updateActiveTenant({ appName: e.target.value })}
-                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500 outline-none text-sm"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Slug</label>
                     <input
                       type="text"
-                      value={activeTenant.slug}
+                      value={activeTenant.id}
                       onChange={(e) => updateActiveTenant({ slug: e.target.value })}
-                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono"
+                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500 outline-none text-sm font-mono"
                     />
                   </div>
                   <div>
@@ -434,7 +478,7 @@ export default function ConfigPage() {
                       type="text"
                       value={activeTenant.bundleIdentifier}
                       onChange={(e) => updateActiveTenant({ bundleIdentifier: e.target.value })}
-                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-mono"
+                      className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-lime-500 outline-none text-sm font-mono"
                     />
                   </div>
                 </div>
@@ -470,12 +514,19 @@ export default function ConfigPage() {
                   disabled={saving}
                   className="flex-1 flex items-center justify-center gap-2 text-sm bg-slate-900 text-white px-4 py-3 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50"
                 >
-                  <Save size={16} /> {saving ? "Saving..." : "Save Changes"}
+                  <Save size={16} /> {saving ? "Saving..." : "Save Config"}
+                </button>
+                <button
+                  onClick={handleUploadAssets}
+                  disabled={uploadingAssets || !Object.values(assetFiles).some(Boolean)}
+                  className="flex-1 flex items-center justify-center gap-2 text-sm bg-lime-600 text-white px-4 py-3 rounded-xl hover:bg-lime-500 transition-colors disabled:opacity-50"
+                >
+                  <Upload size={16} /> {uploadingAssets ? "Uploading..." : "Upload Assets"}
                 </button>
                 <button
                   onClick={handleDeploy}
                   disabled={deploying}
-                  className="flex-1 flex items-center justify-center gap-2 text-sm bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-500 transition-colors disabled:opacity-50"
+                  className="flex-1 flex items-center justify-center gap-2 text-sm bg-lime-600 text-white px-4 py-3 rounded-xl hover:bg-lime-500 transition-colors disabled:opacity-50"
                 >
                   <Rocket size={16} /> {deploying ? "Deploying..." : "Deploy App"}
                 </button>
@@ -495,13 +546,13 @@ export default function ConfigPage() {
             {/* Screen Switcher */}
             <div className="absolute top-6 left-6 right-6 flex items-center justify-between">
               <div className="flex gap-1 bg-white rounded-full p-1 shadow-sm">
-                {(["home", "transactions", "splash"] as const).map((screen) => (
+                {(["Home", "Transactions", "Splash"] as const).map((screen) => (
                   <button
                     key={screen}
                     onClick={() => setPreviewScreen(screen)}
                     className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
                       previewScreen === screen
-                        ? "bg-indigo-500 text-white"
+                        ? "bg-lime-500 text-white"
                         : "text-slate-500 hover:text-slate-700"
                     }`}
                   >
@@ -516,7 +567,7 @@ export default function ConfigPage() {
 
             {/* 3D Phone Container */}
             <div
-              className="relative w-[320px] h-[650px] rounded-[3rem] shadow-2xl bg-slate-900 border-[8px] border-slate-900 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
+              className="relative w-[320px] h-162.5 rounded-[3rem] shadow-2xl bg-slate-900 border-8 border-slate-900 overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]"
               style={{
                 transform: isHoveringPhone
                   ? `rotateX(${mouseRotation.x}deg) rotateY(${mouseRotation.y}deg) scale(1.03)`
@@ -538,23 +589,23 @@ export default function ConfigPage() {
                 className={`w-full h-full flex flex-col ${activeTenant.theme.mode === "dark" ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-900"} transition-colors duration-500 relative`}
               >
                 {/* Dynamic Island */}
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-[100px] h-[28px] bg-black rounded-full flex items-center justify-center">
+                <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-25 h-7 bg-black rounded-full flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-slate-700 mr-4" />
-                  <div className="w-[6px] h-[6px] rounded-full bg-slate-600" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
                 </div>
                 {/* Splash Screen */}
-                {previewScreen === "splash" && (
+                {previewScreen === "Splash" && (
                   <div className="w-full h-full flex flex-col items-center justify-center relative transition-all duration-500" style={{ background: `linear-gradient(to bottom, ${activeTenant.theme.primary}, ${activeTenant.theme.secondary})` }}>
                     {activeTenant.splashImage ? (
                       <NextImage src={activeTenant.splashImage} alt="Splash" fill className="object-cover" />
                     ) : (
                       <>
-                        <div className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent" />
+                        <div className="absolute inset-0 bg-linear-to-b from-white/10 to-transparent" />
                         {activeTenant.logo ? (
                           <NextImage src={activeTenant.logo} alt="Logo" width={80} height={80} className="w-20 h-20 object-contain" />
                         ) : (
                           <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-white text-2xl font-bold">
-                            {activeTenant.name.charAt(0)}
+                            {activeTenant.appName.charAt(0)}
                           </div>
                         )}
                         <p className="text-white font-bold text-lg mt-4">{activeTenant.appName}</p>
@@ -565,9 +616,9 @@ export default function ConfigPage() {
                 )}
 
                 {/* Transactions Screen */}
-                {previewScreen === "transactions" && (
+                {previewScreen === "Transactions" && (
                   <>
-                    <StatusBar mode={activeTenant.theme.mode} />
+                    <StatusBar />
                     <div className="flex-1 overflow-y-auto">
                       <div className="px-6 py-4">
                         <h3 className="text-lg font-bold">Transactions</h3>
@@ -584,9 +635,9 @@ export default function ConfigPage() {
                           { name: "Harvest Payment", amount: "+$1,200.00", type: "credit" },
                           { name: "Transport Fee", amount: "-$25.00", type: "debit" },
                         ].map((tx, i) => (
-                          <div key={i} className={`flex items-center gap-3 p-3 ${activeTenant.theme.mode === "dark" ? "bg-slate-800" : "bg-white"} shadow-sm ${activeTenant.theme.radius}`}>
+                          <div key={i+1} className={`flex items-center gap-3 p-3 ${activeTenant.theme.mode === "dark" ? "bg-slate-800" : "bg-white"} shadow-sm ${activeTenant.theme.radius}`}>
                             <div className={`w-8 h-8 ${activeTenant.theme.radius} flex items-center justify-center ${tx.type === "credit" ? "bg-green-100" : "bg-red-100"}`}>
-                              <ArrowRight size={14} className={tx.type === "credit" ? "text-green-600 rotate-[-45deg]" : "text-red-600 rotate-[135deg]"} />
+                              <ArrowRight size={14} className={tx.type === "credit" ? "text-green-600 -rotate-45" : "text-red-600 rotate-135"} />
                             </div>
                             <div className="flex-1">
                               <p className="text-xs font-medium">{tx.name}</p>
@@ -597,14 +648,14 @@ export default function ConfigPage() {
                         ))}
                       </div>
                     </div>
-                    <PhoneTabBar theme={activeTenant.theme} activeTab="transactions" onTabChange={setPreviewScreen} />
+                    <PhoneTabBar theme={activeTenant.theme} activeTab="Transactions" onTabChange={setPreviewScreen} />
                   </>
                 )}
 
                 {/* Home Screen */}
-                {previewScreen === "home" && (
+                {previewScreen === "Home" && (
                   <>
-                    <StatusBar mode={activeTenant.theme.mode} />
+                    <StatusBar />
                     <div className="flex-1 overflow-y-auto">
                       <div className="px-6 py-4 flex items-center justify-between">
                         <div>
@@ -618,7 +669,7 @@ export default function ConfigPage() {
                             className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg transition-colors duration-500"
                             style={{ backgroundColor: activeTenant.theme.primary }}
                           >
-                            {activeTenant.name.charAt(0)}
+                            {activeTenant.appName.charAt(0)}
                           </div>
                         )}
                       </div>
@@ -631,7 +682,7 @@ export default function ConfigPage() {
                           <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
                           <div>
                             <p className="text-sm opacity-80 font-medium">Total Balance</p>
-                            <h2 className="text-3xl font-bold tracking-tight mt-1">N4,250,000.00</h2>
+                            <h2 className="text-3xl font-bold tracking-tight mt-1">{activeTenant.currency}4,250,000.00</h2>
                           </div>
                           <div className="flex items-center justify-between">
                             <div className="text-xs opacity-90 font-mono">**** 4920</div>
@@ -651,7 +702,7 @@ export default function ConfigPage() {
                           { label: "Scan", icon: Zap },
                           { label: "More", icon: Layers },
                         ].map((action, i) => (
-                          <div key={i} className="flex flex-col items-center gap-2">
+                          <div key={i+1} className="flex flex-col items-center gap-2">
                             <div className={`w-12 h-12 flex items-center justify-center shadow-sm ${activeTenant.theme.mode === "dark" ? "bg-slate-800" : "bg-white"} ${activeTenant.theme.radius}`}>
                               <action.icon size={18} style={{ color: activeTenant.theme.primary }} />
                             </div>
@@ -679,13 +730,13 @@ export default function ConfigPage() {
                       </div>
                     </div>
 
-                    <PhoneTabBar theme={activeTenant.theme} activeTab="home" onTabChange={setPreviewScreen} />
+                    <PhoneTabBar theme={activeTenant.theme} activeTab="Home" onTabChange={setPreviewScreen} />
                   </>
                 )}
               </div>
             </div>
 
-            <div className="absolute bottom-8 text-center text-xs text-slate-400 max-w-[250px]">
+            <div className="absolute bottom-8 text-center text-xs text-slate-400 max-w-62.5">
               Move your mouse over the device for interactive 3D parallax.
             </div>
           </div>
@@ -694,7 +745,7 @@ export default function ConfigPage() {
   );
 }
 
-function StatusBar({ mode }: Readonly<{ mode: string }>) {
+function StatusBar() {
   return (
     <div className="h-14 flex items-end justify-between px-8 pb-1 shrink-0">
       <span className="text-[11px] font-semibold">9:41</span>
@@ -714,10 +765,10 @@ function PhoneTabBar({ theme, activeTab, onTabChange }: Readonly<{
 }>) {
   return (
     <div className={`h-20 shrink-0 ${theme.mode === "dark" ? "bg-slate-800" : "bg-white"} border-t ${theme.mode === "dark" ? "border-slate-700" : "border-slate-200"} flex items-center justify-around px-6 pb-4 pt-2`}>
-      <button onClick={() => onTabChange("home")} className="w-6 h-6 transition-opacity" style={{ color: activeTab === "home" ? theme.primary : undefined, opacity: activeTab === "home" ? 1 : 0.4 }}>
+      <button onClick={() => onTabChange("Home")} className="w-6 h-6 transition-opacity" style={{ color: activeTab === "Home" ? theme.primary : undefined, opacity: activeTab === "Home" ? 1 : 0.4 }}>
         <Globe size={24} />
       </button>
-      <button onClick={() => onTabChange("transactions")} className="w-6 h-6 transition-opacity" style={{ color: activeTab === "transactions" ? theme.primary : undefined, opacity: activeTab === "transactions" ? 1 : 0.4 }}>
+      <button onClick={() => onTabChange("Transactions")} className="w-6 h-6 transition-opacity" style={{ color: activeTab === "Transactions" ? theme.primary : undefined, opacity: activeTab === "Transactions" ? 1 : 0.4 }}>
         <CreditCard size={24} />
       </button>
       <button className="w-6 h-6 opacity-40"><Bell size={24} /></button>
@@ -741,7 +792,7 @@ function ToggleItem({ label, description, checked, onChange }: Readonly<
       </div>
       <button
         onClick={onChange}
-        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? "bg-indigo-500" : "bg-slate-300"}`}
+        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? "bg-lime-500" : "bg-slate-300"}`}
       >
         <span
           className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? "translate-x-5" : "translate-x-0"}`}

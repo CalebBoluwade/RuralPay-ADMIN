@@ -24,28 +24,17 @@ export type ApiKeyListItem = {
   isActive: boolean;
 };
 
-export type TenantConfig = {
-  id: string;
-  name: string;
-  domain: string;
+export type CreateTenantConfig = {
+  tenantId: string;
   appName: string;
-  slug: string;
-  bundleIdentifier: string;
-  theme: {
-    primary: string;
-    secondary: string;
-    radius: string;
-    mode: "light" | "dark";
-  };
-  logo: string;
-  splashImage: string;
-  features: { transfers: boolean; offlineMode: boolean; crypto: boolean };
 };
 
-export type TenantConfigPatch = {
+export type TenantConfig = {
   appName?: string;
   currency?: string;
   currencyCode?: string;
+  bundleIdentifier: string;
+  // slug: string;
   colors?: {
     primary?: string;
     primaryDark?: string;
@@ -116,7 +105,7 @@ const AUTH_TOKEN = "<access_token>";
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
-    baseUrl: `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/v1`,
+    baseUrl: `${process.env.NODE_ENV === "development" ? process.env.NEXT_PUBLIC_API_BASE_URL : "https://ruralpay.zegiftedtechnologies.com"}/api/v1`,
     prepareHeaders: (headers) => {
       headers.set("accept", "application/json");
       headers.set("Authorization", `Bearer ${AUTH_TOKEN}`);
@@ -199,17 +188,36 @@ export const api = createApi({
     }),
 
     // Tenant Config
-    getTenants: builder.query<TenantConfig[], void>({
-      query: () => "/tenants",
+    getTenants: builder.query<
+      APIResponse<
+        {
+          tenantId: string;
+          appName: string;
+          bundleIdentifier: string;
+        }[]
+      >,
+      void
+    >({
+      query: () => `/admin/tenant`,
       providesTags: ["Tenants"],
     }),
-    createTenant: builder.mutation<TenantConfig, Partial<TenantConfig>>({
-      query: (body) => ({ url: "/tenants", method: "POST", body }),
+    getTenantById: builder.query<
+      APIResponse<TenantConfig>,
+      { tenantId: string }
+    >({
+      query: ({ tenantId }) => `/admin/tenant/${tenantId}/config`,
+      providesTags: ["Tenants"],
+    }),
+    createTenant: builder.mutation<
+      APIResponse<CreateTenantConfig>,
+      Partial<TenantConfig>
+    >({
+      query: (body) => ({ url: "/admin/tenant", method: "POST", body }),
       invalidatesTags: ["Tenants"],
     }),
     updateTenantConfig: builder.mutation<
-      APIResponse<TenantConfigPatch>,
-      { tenantId: string; body: TenantConfigPatch }
+      APIResponse<TenantConfig>,
+      { tenantId: string; body: TenantConfig }
     >({
       query: ({ tenantId, body }) => ({
         url: `/admin/tenant/${tenantId}/config`,
@@ -218,8 +226,19 @@ export const api = createApi({
       }),
       invalidatesTags: ["Tenants"],
     }),
-    deployTenantConfig: builder.mutation<DeployResponse, string>({
-      query: (id) => ({ url: `/tenants/${id}/deploy`, method: "POST" }),
+    uploadTenantAssets: builder.mutation<
+      APIResponse<unknown>,
+      { tenantId: string; formData: FormData }
+    >({
+      query: ({ tenantId, formData }) => ({
+        url: `/admin/tenant/${tenantId}/assets`,
+        method: "PATCH",
+        body: formData,
+      }),
+      invalidatesTags: ["Tenants"],
+    }),
+    deployTenantConfig: builder.mutation<APIResponse<DeployResponse>, string>({
+      query: (id) => ({ url: `/admin/tenant/${id}/deploy`, method: "POST" }),
     }),
   }),
 });
@@ -236,7 +255,9 @@ export const {
   useDeclineMerchantMutation,
   useGetBanksQuery,
   useGetTenantsQuery,
+  useGetTenantByIdQuery,
   useCreateTenantMutation,
   useUpdateTenantConfigMutation,
+  useUploadTenantAssetsMutation,
   useDeployTenantConfigMutation,
 } = api;
